@@ -1,0 +1,1527 @@
+// prisma/schema.prisma
+// Production-grade Prisma schema for Consulting Management Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  SUPER_ADMIN    // System-wide super administrator
+  ORG_ADMIN      // Organization administrator
+  CONSULTANT     // Consultant/practitioner
+  STAFF          // Support staff
+  CLIENT         // External client
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION   // Email verification pending
+  ACTIVE                 // Active user
+  INACTIVE               // Temporarily inactive
+  SUSPENDED              // Suspended by admin
+  DELETED                // Soft-deleted
+}
+
+enum LeadStatus {
+  NEW                 // Just created
+  CONTACTED           // Initial contact made
+  QUALIFIED           // Met criteria
+  PROPOSAL_SENT       // Proposal sent to lead
+  NEGOTIATING         // Negotiation in progress
+  WON                 // Converted to client
+  LOST                // Lost opportunity
+  ARCHIVED            // Archived
+}
+
+enum ProposalStatus {
+  DRAFT               // Being created
+  SENT                // Sent to client
+  VIEWED              // Client viewed (with tracking)
+  ACCEPTED            // Client accepted
+  REJECTED            // Client rejected
+  EXPIRED             // Proposal expired
+  ARCHIVED            // Archived
+}
+
+enum ProposalApprovalStatus {
+  PENDING             // Awaiting approval
+  APPROVED            // Approved
+  REJECTED            // Rejected
+  CANCELLED           // Cancelled
+}
+
+enum ContractStatus {
+  DRAFT               // Being created
+  PENDING_SIGNATURE   // Awaiting signatures
+  PARTIALLY_SIGNED    // Some parties signed
+  FULLY_SIGNED        // All parties signed
+  EXECUTED            // Executed and active
+  EXPIRED             // Expired
+  TERMINATED          // Terminated
+  ARCHIVED            // Archived
+}
+
+enum SignatureStatus {
+  PENDING             // Awaiting signature
+  SIGNED              // Signed
+  REJECTED            // Rejected
+  EXPIRED             // Signature request expired
+}
+
+enum InvoiceStatus {
+  DRAFT               // Being created
+  ISSUED              // Issued to client
+  SENT                // Sent to client
+  VIEWED              // Client viewed invoice
+  PARTIALLY_PAID      // Partial payment received
+  PAID                // Fully paid
+  OVERDUE             // Past due date
+  CANCELLED           // Cancelled
+  ARCHIVED            // Archived
+}
+
+enum PaymentStatus {
+  PENDING             // Awaiting processing
+  PROCESSING          // Being processed
+  SUCCEEDED           // Payment successful
+  FAILED              // Payment failed
+  CANCELLED           // Cancelled
+  REFUNDED            // Refunded
+  PARTIALLY_REFUNDED  // Partially refunded
+}
+
+enum PaymentMethod {
+  CARD                // Credit/debit card
+  BANK_TRANSFER       // Bank transfer
+  ACH                 // ACH transfer
+  CHECK               // Check
+  OTHER               // Other method
+}
+
+enum ProjectStatus {
+  PLANNING            // In planning phase
+  ACTIVE              // Active/in progress
+  ON_HOLD             // On hold
+  COMPLETED           // Completed
+  ARCHIVED            // Archived
+  CANCELLED           // Cancelled
+}
+
+enum TaskStatus {
+  BACKLOG             // Not started
+  TODO                // To do
+  IN_PROGRESS         // Currently being worked on
+  REVIEW              // Under review
+  COMPLETED           // Completed
+  CANCELLED           // Cancelled
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MeetingStatus {
+  SCHEDULED           // Scheduled
+  CONFIRMED           // Confirmed by all parties
+  CANCELLED           // Cancelled
+  COMPLETED           // Completed
+  NO_SHOW             // No show
+}
+
+enum NotificationChannel {
+  EMAIL               // Email notification
+  IN_APP              // In-app notification
+  SMS                 // SMS notification (future)
+  WEBHOOK             // Webhook dispatch
+}
+
+enum NotificationStatus {
+  PENDING             // Queued for sending
+  SENT                // Successfully sent
+  FAILED              // Failed to send
+  RETRYING            // Retry attempt
+  UNREAD              // In-app, unread
+  READ                // In-app, read
+}
+
+enum FileAccessType {
+  PRIVATE             // Owner only
+  ORGANIZATION        // Organization members
+  CLIENT              // Shared with client
+  PUBLIC              // Publicly accessible
+}
+
+enum AuditEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+  EMAIL_VERIFIED
+  TWO_FACTOR_ENABLED
+  TWO_FACTOR_DISABLED
+  ROLE_CHANGED
+  PERMISSION_GRANTED
+  PERMISSION_REVOKED
+  ORGANIZATION_CREATED
+  ORGANIZATION_DELETED
+  ORGANIZATION_UPDATED
+  USER_CREATED
+  USER_DELETED
+  USER_UPDATED
+  PROPOSAL_CREATED
+  PROPOSAL_SENT
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  CONTRACT_CREATED
+  CONTRACT_SIGNED
+  CONTRACT_FULLY_SIGNED
+  INVOICE_CREATED
+  INVOICE_ISSUED
+  INVOICE_PAID
+  INVOICE_CANCELLED
+  PAYMENT_INITIATED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  PAYMENT_REFUNDED
+  FILE_UPLOADED
+  FILE_DOWNLOADED
+  FILE_DELETED
+  FILE_SHARED
+  SETTINGS_CHANGED
+  ADMIN_ACTION
+}
+
+// ============================================================================
+// IDENTITY & ACCESS CONTROL
+// ============================================================================
+
+model Organization {
+  id                    String @id @default(cuid())
+  name                  String
+  slug                  String @unique
+  description           String?
+  logo_url              String?
+  industry              String?
+  company_size          String?
+  website               String?
+  
+  // Billing
+  subscription_plan     String @default("basic") // basic, professional, enterprise
+  billing_email         String?
+  billing_phone         String?
+  billing_address       String?
+  tax_id                String?
+  
+  // Settings
+  timezone              String @default("UTC")
+  currency              String @default("USD")
+  language              String @default("en")
+  
+  // Workspace metadata
+  custom_domain         String?
+  custom_branding       Boolean @default(false)
+  
+  // Status
+  is_active             Boolean @default(true)
+  
+  // Timestamps
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  // Relations
+  users                 OrganizationMember[]
+  consultants           Consultant[]
+  clients               Client[]
+  leads                 Lead[]
+  proposals             Proposal[]
+  contracts             Contract[]
+  invoices              Invoice[]
+  projects              Project[]
+  meetings              Meeting[]
+  files                 FileAsset[]
+  conversations         Conversation[]
+  notifications         Notification[]
+  audit_logs            AuditLog[]
+  settings              SystemSetting[]
+  
+  @@index([slug])
+  @@index([is_active])
+}
+
+model User {
+  id                    String @id @default(cuid())
+  email                 String @unique
+  email_verified        Boolean @default(false)
+  email_verified_at     DateTime?
+  password_hash         String
+  
+  // Profile
+  first_name            String
+  last_name             String
+  avatar_url            String?
+  phone                 String?
+  bio                   String?
+  
+  // Auth
+  last_login            DateTime?
+  last_login_ip         String?
+  login_attempts        Int @default(0)
+  locked_until          DateTime?
+  
+  // Status
+  status                UserStatus @default(PENDING_VERIFICATION)
+  is_super_admin        Boolean @default(false)
+  
+  // 2FA
+  two_factor_enabled    Boolean @default(false)
+  two_factor_secret     String?
+  
+  // Timestamps
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  // Relations
+  organization_memberships OrganizationMember[]
+  profile               UserProfile?
+  sessions              Session[]
+  refresh_tokens        RefreshToken[]
+  password_resets       PasswordReset[]
+  two_factor_settings   TwoFactorSetting?
+  consultant            Consultant?
+  client                Client?
+  created_leads         Lead[]
+  assigned_tasks        Task[]
+  messages              Message[]
+  notifications         Notification[]
+  file_access_logs      FileAccessLog[]
+  audit_logs            AuditLog[]
+  
+  @@index([email])
+  @@index([status])
+  @@index([is_super_admin])
+}
+
+model UserProfile {
+  id                    String @id @default(cuid())
+  user_id               String @unique
+  
+  // Preferences
+  notification_email    Boolean @default(true)
+  notification_sms      Boolean @default(false)
+  notification_digest   String @default("daily") // immediate, daily, weekly
+  theme                 String @default("light")
+  
+  // Contact preferences
+  timezone              String?
+  language              String?
+  
+  // Professional
+  title                 String?
+  company               String?
+  location              String?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+}
+
+model OrganizationMember {
+  id                    String @id @default(cuid())
+  organization_id       String
+  user_id               String
+  role                  UserRole @default(STAFF)
+  
+  // Invite flow
+  invited_at            DateTime @default(now())
+  invited_by_id         String?
+  accepted_at           DateTime?
+  invitation_token      String? @unique
+  invitation_expires_at DateTime?
+  
+  // Status
+  is_active             Boolean @default(true)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([organization_id, user_id])
+  @@index([organization_id])
+  @@index([user_id])
+  @@index([role])
+}
+
+model TwoFactorSetting {
+  id                    String @id @default(cuid())
+  user_id               String @unique
+  secret                String
+  backup_codes          String[] // JSON-stored array of backup codes
+  enabled               Boolean @default(false)
+  confirmed_at          DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id                    String @id @default(cuid())
+  user_id               String
+  token                 String @unique
+  user_agent            String?
+  ip_address            String?
+  
+  expires_at            DateTime
+  created_at            DateTime @default(now())
+  last_activity_at      DateTime @updatedAt
+  
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model RefreshToken {
+  id                    String @id @default(cuid())
+  user_id               String
+  token                 String @unique
+  
+  expires_at            DateTime
+  revoked_at            DateTime?
+  
+  created_at            DateTime @default(now())
+  
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model PasswordReset {
+  id                    String @id @default(cuid())
+  user_id               String
+  token                 String @unique
+  
+  expires_at            DateTime
+  used_at               DateTime?
+  
+  created_at            DateTime @default(now())
+  
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+// ============================================================================
+// CONSULTANTS & CLIENTS
+// ============================================================================
+
+model Consultant {
+  id                    String @id @default(cuid())
+  organization_id       String
+  user_id               String @unique
+  
+  // Professional
+  title                 String?
+  specialization       String[]
+  bio                   String?
+  hourly_rate          Decimal? @db.Decimal(10, 2)
+  
+  // Availability
+  is_available          Boolean @default(true)
+  availability_updated_at DateTime?
+  
+  // Stats
+  total_proposals       Int @default(0)
+  total_projects        Int @default(0)
+  total_meetings        Int @default(0)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  availability_rules    AvailabilityRule[]
+  meetings              Meeting[]
+  proposals             Proposal[]
+  projects              Project[]
+  
+  @@unique([organization_id, user_id])
+  @@index([organization_id])
+  @@index([is_available])
+}
+
+model Client {
+  id                    String @id @default(cuid())
+  organization_id       String
+  user_id               String @unique
+  
+  // Company info
+  company_name          String?
+  company_phone         String?
+  company_website       String?
+  company_address       String?
+  
+  // Contact
+  contact_first_name    String?
+  contact_last_name     String?
+  contact_title         String?
+  contact_phone         String?
+  contact_email         String?
+  
+  // Status
+  status                String @default("active") // active, inactive, prospect, archived
+  
+  // Metadata
+  source                String? // How they became a client
+  industry              String?
+  company_size          String?
+  
+  // Stats
+  total_projects        Int @default(0)
+  total_invoices        Int @default(0)
+  total_paid            Decimal @default(0) @db.Decimal(15, 2)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  leads                 Lead[]
+  projects              Project[]
+  invoices              Invoice[]
+  contacts              ClientContact[]
+  notes                 ClientNote[]
+  activities            ClientActivity[]
+  meetings              Meeting[]
+  
+  @@unique([organization_id, user_id])
+  @@index([organization_id])
+  @@index([status])
+}
+
+model ClientContact {
+  id                    String @id @default(cuid())
+  client_id             String
+  organization_id       String
+  
+  name                  String
+  email                 String
+  phone                 String?
+  title                 String?
+  is_primary            Boolean @default(false)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  client                Client @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([client_id])
+  @@index([organization_id])
+}
+
+model ClientNote {
+  id                    String @id @default(cuid())
+  client_id             String
+  organization_id       String
+  created_by_id         String
+  
+  content               String
+  is_internal           Boolean @default(true)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  client                Client @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([client_id])
+  @@index([organization_id])
+}
+
+model ClientActivity {
+  id                    String @id @default(cuid())
+  client_id             String
+  organization_id       String
+  
+  activity_type         String // email_sent, proposal_sent, contract_signed, etc.
+  description           String
+  metadata              String? // JSON
+  
+  created_at            DateTime @default(now())
+  
+  client                Client @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([client_id])
+  @@index([organization_id])
+  @@index([activity_type])
+}
+
+// ============================================================================
+// CRM / LEAD MANAGEMENT
+// ============================================================================
+
+model Lead {
+  id                    String @id @default(cuid())
+  organization_id       String
+  created_by_id         String
+  
+  // Lead info
+  first_name            String
+  last_name             String
+  email                 String
+  phone                 String?
+  company               String?
+  title                 String?
+  
+  // Lead data
+  source                String? // website, referral, cold_outreach, etc.
+  message               String?
+  budget_range          String? // e.g., "$10k-$25k"
+  timeline              String? // immediate, this_month, this_quarter, etc.
+  
+  // Status
+  status                LeadStatus @default(NEW)
+  status_changed_at     DateTime @default(now())
+  
+  // Qualification
+  qualified_at          DateTime?
+  qualified_by_id       String?
+  qualification_notes   String?
+  
+  // Engagement
+  contacted_at          DateTime?
+  proposal_sent_at      DateTime?
+  converted_at          DateTime?
+  converted_to_client_id String?
+  
+  // Metadata
+  tags                  LeadTag[]
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  converted_to_client   Client? @relation(fields: [converted_to_client_id], references: [id])
+  
+  @@index([organization_id])
+  @@index([status])
+  @@index([source])
+  @@index([created_at])
+}
+
+model LeadTag {
+  id                    String @id @default(cuid())
+  lead_id               String
+  
+  name                  String
+  color                 String?
+  
+  created_at            DateTime @default(now())
+  
+  lead                  Lead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  
+  @@unique([lead_id, name])
+  @@index([lead_id])
+}
+
+// ============================================================================
+// COMMERCIAL FLOW
+// ============================================================================
+
+model Proposal {
+  id                    String @id @default(cuid())
+  organization_id       String
+  created_by_id         String
+  lead_id               String?
+  client_id             String?
+  
+  // Basic info
+  title                 String
+  description           String?
+  proposal_number       String @unique // e.g., PROP-2024-001
+  
+  // Financials
+  subtotal              Decimal @default(0) @db.Decimal(15, 2)
+  tax_amount            Decimal @default(0) @db.Decimal(15, 2)
+  tax_rate              Decimal @default(0) @db.Decimal(5, 2)
+  discount_amount       Decimal @default(0) @db.Decimal(15, 2)
+  discount_percentage   Decimal @default(0) @db.Decimal(5, 2)
+  total_amount          Decimal @default(0) @db.Decimal(15, 2)
+  currency              String @default("USD")
+  
+  // Validity
+  valid_until           DateTime?
+  terms_condition       String?
+  
+  // Status & workflow
+  status                ProposalStatus @default(DRAFT)
+  approval_status       ProposalApprovalStatus @default(PENDING)
+  approved_by_id        String?
+  approved_at           DateTime?
+  
+  // Tracking
+  sent_at               DateTime?
+  first_viewed_at       DateTime?
+  last_viewed_at        DateTime?
+  view_count            Int @default(0)
+  accepted_at           DateTime?
+  rejected_at           DateTime?
+  
+  // Versions
+  version_number        Int @default(1)
+  parent_id             String?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  lead                  Lead? @relation(fields: [lead_id], references: [id])
+  client                Client? @relation(fields: [client_id], references: [id])
+  approved_by           Consultant? @relation(fields: [approved_by_id], references: [id])
+  items                 ProposalItem[]
+  versions              ProposalVersion[]
+  parent                Proposal? @relation("VersionHistory", fields: [parent_id], references: [id])
+  versions_of_this      Proposal[] @relation("VersionHistory")
+  
+  @@unique([organization_id, proposal_number])
+  @@index([organization_id])
+  @@index([status])
+  @@index([client_id])
+  @@index([lead_id])
+}
+
+model ProposalItem {
+  id                    String @id @default(cuid())
+  proposal_id           String
+  organization_id       String
+  
+  description           String
+  quantity              Decimal @default(1) @db.Decimal(10, 2)
+  unit_price            Decimal @db.Decimal(15, 2)
+  amount                Decimal @db.Decimal(15, 2)
+  
+  order_index           Int @default(0)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  proposal              Proposal @relation(fields: [proposal_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([proposal_id])
+  @@index([organization_id])
+}
+
+model ProposalVersion {
+  id                    String @id @default(cuid())
+  proposal_id           String
+  organization_id       String
+  
+  version_number        Int
+  snapshot              String // JSON snapshot of proposal at this version
+  
+  created_at            DateTime @default(now())
+  
+  proposal              Proposal @relation(fields: [proposal_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@unique([proposal_id, version_number])
+  @@index([proposal_id])
+}
+
+model Contract {
+  id                    String @id @default(cuid())
+  organization_id       String
+  created_by_id         String
+  proposal_id           String?
+  client_id             String
+  
+  // Basic info
+  title                 String
+  description           String?
+  contract_number       String @unique
+  
+  // Content
+  content               String // HTML/markdown content
+  scope_of_work         String?
+  payment_terms         String?
+  termination_clause    String?
+  
+  // Signatures
+  status                ContractStatus @default(DRAFT)
+  requires_party_count  Int @default(2)
+  signed_party_count    Int @default(0)
+  fully_signed_at       DateTime?
+  
+  // Validity
+  effective_date        DateTime?
+  expiration_date       DateTime?
+  
+  // Versioning
+  version_number        Int @default(1)
+  parent_id             String?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  executed_at           DateTime?
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  proposal              Proposal? @relation(fields: [proposal_id], references: [id])
+  client                Client @relation(fields: [client_id], references: [id])
+  signatures            SignatureRecord[]
+  parent                Contract? @relation("VersionHistory", fields: [parent_id], references: [id])
+  versions_of_this      Contract[] @relation("VersionHistory")
+  
+  @@unique([organization_id, contract_number])
+  @@index([organization_id])
+  @@index([status])
+  @@index([client_id])
+}
+
+model SignatureRecord {
+  id                    String @id @default(cuid())
+  contract_id           String
+  organization_id       String
+  
+  signer_name           String
+  signer_email          String
+  signer_title          String?
+  
+  status                SignatureStatus @default(PENDING)
+  signed_at             DateTime?
+  signature_data        String? // Base64-encoded signature image or digital proof
+  
+  request_sent_at       DateTime?
+  expires_at            DateTime?
+  rejected_at           DateTime?
+  rejection_reason      String?
+  
+  order_index           Int
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  contract              Contract @relation(fields: [contract_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([contract_id])
+  @@index([status])
+}
+
+model Invoice {
+  id                    String @id @default(cuid())
+  organization_id       String
+  created_by_id         String
+  project_id            String?
+  client_id             String
+  
+  // Invoice info
+  invoice_number        String @unique // e.g., INV-2024-001
+  po_number             String?
+  description           String?
+  
+  // Financials
+  subtotal              Decimal @default(0) @db.Decimal(15, 2)
+  tax_amount            Decimal @default(0) @db.Decimal(15, 2)
+  tax_rate              Decimal @default(0) @db.Decimal(5, 2)
+  discount_amount       Decimal @default(0) @db.Decimal(15, 2)
+  total_amount          Decimal @default(0) @db.Decimal(15, 2)
+  amount_paid           Decimal @default(0) @db.Decimal(15, 2)
+  amount_due            Decimal @default(0) @db.Decimal(15, 2)
+  currency              String @default("USD")
+  
+  // Dates
+  invoice_date          DateTime @default(now())
+  due_date              DateTime
+  
+  // Status
+  status                InvoiceStatus @default(DRAFT)
+  issued_at             DateTime?
+  sent_at               DateTime?
+  first_viewed_at       DateTime?
+  
+  // Payment
+  payment_terms         String? // Net 30, Net 60, etc.
+  payment_link          String?
+  
+  // Reminders
+  first_reminder_sent   DateTime?
+  second_reminder_sent  DateTime?
+  final_reminder_sent   DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  project               Project? @relation(fields: [project_id], references: [id])
+  client                Client @relation(fields: [client_id], references: [id])
+  items                 InvoiceItem[]
+  payments              Payment[]
+  
+  @@unique([organization_id, invoice_number])
+  @@index([organization_id])
+  @@index([status])
+  @@index([client_id])
+  @@index([due_date])
+}
+
+model InvoiceItem {
+  id                    String @id @default(cuid())
+  invoice_id            String
+  organization_id       String
+  
+  description           String
+  quantity              Decimal @default(1) @db.Decimal(10, 2)
+  unit_price            Decimal @db.Decimal(15, 2)
+  amount                Decimal @db.Decimal(15, 2)
+  
+  order_index           Int @default(0)
+  
+  created_at            DateTime @default(now())
+  
+  invoice               Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([invoice_id])
+}
+
+model Payment {
+  id                    String @id @default(cuid())
+  organization_id       String
+  invoice_id            String
+  
+  // Payment info
+  amount                Decimal @db.Decimal(15, 2)
+  currency              String @default("USD")
+  method                PaymentMethod @default(CARD)
+  
+  // External references
+  stripe_payment_intent_id String?
+  stripe_charge_id      String?
+  transaction_id        String?
+  
+  // Status
+  status                PaymentStatus @default(PENDING)
+  
+  // Tracking
+  initiated_at          DateTime @default(now())
+  processed_at          DateTime?
+  
+  // Refunds
+  refund_amount         Decimal @default(0) @db.Decimal(15, 2)
+  refunded_at           DateTime?
+  refund_reason         String?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  invoice               Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  attempts              PaymentAttempt[]
+  
+  @@index([organization_id])
+  @@index([invoice_id])
+  @@index([status])
+}
+
+model PaymentAttempt {
+  id                    String @id @default(cuid())
+  payment_id            String
+  organization_id       String
+  
+  status                PaymentStatus @default(PENDING)
+  error_message         String?
+  error_code            String?
+  
+  retry_count           Int @default(0)
+  next_retry_at         DateTime?
+  
+  created_at            DateTime @default(now())
+  
+  payment               Payment @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([payment_id])
+  @@index([status])
+}
+
+// ============================================================================
+// DELIVERY / OPERATIONS
+// ============================================================================
+
+model Project {
+  id                    String @id @default(cuid())
+  organization_id       String
+  created_by_id         String
+  client_id             String
+  consultant_id         String?
+  invoice_id            String?
+  
+  // Project info
+  name                  String
+  description           String?
+  scope                 String?
+  
+  // Status
+  status                ProjectStatus @default(PLANNING)
+  status_changed_at     DateTime @default(now())
+  
+  // Dates
+  start_date            DateTime?
+  end_date              DateTime?
+  
+  // Financials
+  budget                Decimal? @db.Decimal(15, 2)
+  actual_cost           Decimal @default(0) @db.Decimal(15, 2)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  client                Client @relation(fields: [client_id], references: [id])
+  consultant            Consultant? @relation(fields: [consultant_id], references: [id])
+  invoice               Invoice? @relation(fields: [invoice_id], references: [id])
+  milestones            ProjectMilestone[]
+  tasks                 Task[]
+  deliverables          Deliverable[]
+  time_entries          TimeEntry[]
+  
+  @@index([organization_id])
+  @@index([status])
+  @@index([client_id])
+}
+
+model ProjectMilestone {
+  id                    String @id @default(cuid())
+  project_id            String
+  organization_id       String
+  
+  name                  String
+  description           String?
+  
+  target_date           DateTime
+  completed_at          DateTime?
+  
+  status                String @default("pending") // pending, in_progress, completed
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  project               Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([project_id])
+}
+
+model Task {
+  id                    String @id @default(cuid())
+  project_id            String
+  organization_id       String
+  assigned_to_id        String?
+  created_by_id         String
+  
+  // Task info
+  title                 String
+  description           String?
+  
+  // Status & priority
+  status                TaskStatus @default(BACKLOG)
+  priority              TaskPriority @default(MEDIUM)
+  
+  // Dates
+  due_date              DateTime?
+  start_date            DateTime?
+  completed_at          DateTime?
+  
+  // Hierarchy
+  parent_task_id        String?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  project               Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  assigned_to           User? @relation(fields: [assigned_to_id], references: [id])
+  created_by            User @relation(fields: [created_by_id], references: [id], onDelete: Cascade, name: "task_creator")
+  parent_task           Task? @relation("TaskHierarchy", fields: [parent_task_id], references: [id])
+  subtasks              Task[] @relation("TaskHierarchy")
+  comments              TaskComment[]
+  
+  @@index([project_id])
+  @@index([status])
+  @@index([assigned_to_id])
+}
+
+model TaskComment {
+  id                    String @id @default(cuid())
+  task_id               String
+  created_by_id         String
+  
+  content               String
+  is_internal           Boolean @default(false)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  task                  Task @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  
+  @@index([task_id])
+}
+
+model Deliverable {
+  id                    String @id @default(cuid())
+  project_id            String
+  organization_id       String
+  
+  name                  String
+  description           String?
+  
+  file_id               String?
+  status                String @default("pending") // pending, in_progress, submitted, approved, rejected
+  
+  submitted_at          DateTime?
+  approved_at           DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  project               Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([project_id])
+}
+
+model TimeEntry {
+  id                    String @id @default(cuid())
+  project_id            String
+  organization_id       String
+  user_id               String
+  
+  description           String?
+  hours                 Decimal @db.Decimal(8, 2)
+  date                  DateTime
+  
+  is_billable           Boolean @default(true)
+  rate_per_hour         Decimal? @db.Decimal(10, 2)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  project               Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@index([project_id])
+  @@index([user_id])
+}
+
+// ============================================================================
+// SCHEDULING / MEETINGS
+// ============================================================================
+
+model AvailabilityRule {
+  id                    String @id @default(cuid())
+  consultant_id         String
+  organization_id       String
+  
+  day_of_week           Int // 0-6, Sunday to Saturday
+  start_time            String // HH:MM format
+  end_time              String // HH:MM format
+  
+  timezone              String @default("UTC")
+  is_active             Boolean @default(true)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  consultant            Consultant @relation(fields: [consultant_id], references: [id], onDelete: Cascade)
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@unique([consultant_id, day_of_week, start_time, end_time])
+  @@index([consultant_id])
+}
+
+model Meeting {
+  id                    String @id @default(cuid())
+  organization_id       String
+  consultant_id         String
+  client_id             String
+  created_by_id         String
+  
+  // Meeting info
+  title                 String
+  description           String?
+  
+  // Scheduling
+  start_time            DateTime
+  end_time              DateTime
+  
+  // Location/Medium
+  meeting_type          String @default("video") // video, phone, in_person
+  meeting_link          String?
+  location              String?
+  
+  // Status
+  status                MeetingStatus @default(SCHEDULED)
+  
+  // Confirmation
+  consultant_confirmed  Boolean @default(false)
+  client_confirmed      Boolean @default(false)
+  confirmed_at          DateTime?
+  
+  // Reminders
+  consultant_reminder_sent Boolean @default(false)
+  client_reminder_sent  Boolean @default(false)
+  
+  // Outcome
+  notes                 String?
+  follow_up_required    Boolean @default(false)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  cancelled_at          DateTime?
+  completed_at          DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  consultant            Consultant @relation(fields: [consultant_id], references: [id])
+  client                Client @relation(fields: [client_id], references: [id])
+  created_by            User @relation(fields: [created_by_id], references: [id])
+  participants          MeetingParticipant[]
+  
+  @@index([organization_id])
+  @@index([start_time])
+  @@index([status])
+  @@index([consultant_id])
+}
+
+model MeetingParticipant {
+  id                    String @id @default(cuid())
+  meeting_id            String
+  email                 String
+  
+  name                  String?
+  role                  String? // organizer, consultant, client, attendee
+  
+  response_status       String @default("pending") // pending, accepted, declined, tentative
+  responded_at          DateTime?
+  
+  created_at            DateTime @default(now())
+  
+  meeting               Meeting @relation(fields: [meeting_id], references: [id], onDelete: Cascade)
+  
+  @@unique([meeting_id, email])
+  @@index([meeting_id])
+}
+
+// ============================================================================
+// FILES & COMMUNICATION
+// ============================================================================
+
+model FileAsset {
+  id                    String @id @default(cuid())
+  organization_id       String
+  uploaded_by_id        String
+  
+  // File metadata
+  original_filename     String
+  file_key              String // S3 key
+  file_size             Int // bytes
+  mime_type             String
+  
+  // Storage
+  storage_provider      String @default("s3")
+  bucket                String?
+  
+  // Access
+  access_type           FileAccessType @default(PRIVATE)
+  is_public             Boolean @default(false)
+  
+  // Content metadata
+  is_scanned            Boolean @default(false)
+  is_infected           Boolean @default(false)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  uploaded_by           User @relation(fields: [uploaded_by_id], references: [id])
+  access_logs           FileAccessLog[]
+  message_attachments   MessageAttachment[]
+  
+  @@index([organization_id])
+  @@index([access_type])
+}
+
+model FileAccessLog {
+  id                    String @id @default(cuid())
+  file_id               String
+  accessed_by_id        String
+  
+  action                String // download, view, share, delete
+  ip_address            String?
+  user_agent            String?
+  
+  created_at            DateTime @default(now())
+  
+  file                  FileAsset @relation(fields: [file_id], references: [id], onDelete: Cascade)
+  accessed_by           User @relation(fields: [accessed_by_id], references: [id])
+  
+  @@index([file_id])
+  @@index([accessed_by_id])
+}
+
+model Conversation {
+  id                    String @id @default(cuid())
+  organization_id       String
+  
+  subject               String
+  participant_ids       String[] // Array of user IDs
+  
+  last_message_at       DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  archived_at           DateTime?
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  messages              Message[]
+  
+  @@index([organization_id])
+}
+
+model Message {
+  id                    String @id @default(cuid())
+  conversation_id       String
+  sent_by_id            String
+  
+  content               String
+  is_internal_note      Boolean @default(false)
+  
+  read_by_ids           String[] // Array of user IDs who have read
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime?
+  
+  conversation          Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sent_by               User @relation(fields: [sent_by_id], references: [id])
+  attachments           MessageAttachment[]
+  
+  @@index([conversation_id])
+  @@index([sent_by_id])
+}
+
+model MessageAttachment {
+  id                    String @id @default(cuid())
+  message_id            String
+  file_id               String
+  
+  created_at            DateTime @default(now())
+  
+  message               Message @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  file                  FileAsset @relation(fields: [file_id], references: [id], onDelete: Cascade)
+  
+  @@unique([message_id, file_id])
+  @@index([message_id])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id                    String @id @default(cuid())
+  organization_id       String
+  user_id               String
+  
+  // Content
+  title                 String
+  message               String
+  data                  String? // JSON for additional context
+  
+  // Type & routing
+  notification_type     String // invoice_paid, proposal_sent, meeting_reminder, etc.
+  related_entity_id     String? // ID of the related entity
+  related_entity_type   String? // Type of entity (Invoice, Proposal, etc.)
+  
+  // Channels
+  channels              NotificationChannel[]
+  
+  // Status
+  status                NotificationStatus @default(PENDING)
+  read_at               DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([organization_id])
+  @@index([user_id])
+  @@index([notification_type])
+  @@index([status])
+}
+
+model NotificationPreference {
+  id                    String @id @default(cuid())
+  user_id               String @unique
+  
+  // Email notifications
+  email_invoice         Boolean @default(true)
+  email_proposal        Boolean @default(true)
+  email_contract        Boolean @default(true)
+  email_payment         Boolean @default(true)
+  email_meeting         Boolean @default(true)
+  email_task            Boolean @default(true)
+  email_message         Boolean @default(true)
+  email_digest          Boolean @default(true)
+  
+  digest_frequency      String @default("daily") // immediate, daily, weekly
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+}
+
+model EmailLog {
+  id                    String @id @default(cuid())
+  to_email              String
+  organization_id       String
+  user_id               String?
+  
+  subject               String
+  template              String?
+  
+  status                NotificationStatus @default(PENDING)
+  sent_at               DateTime?
+  failed_reason         String?
+  
+  retry_count           Int @default(0)
+  next_retry_at         DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user                  User? @relation(fields: [user_id], references: [id])
+  
+  @@index([to_email])
+  @@index([status])
+}
+
+// ============================================================================
+// GOVERNANCE & AUDIT
+// ============================================================================
+
+model AuditLog {
+  id                    String @id @default(cuid())
+  organization_id       String
+  user_id               String?
+  
+  event_type            AuditEventType
+  description           String
+  
+  entity_type           String?
+  entity_id             String?
+  
+  changes               String? // JSON of before/after
+  metadata              String? // Additional context as JSON
+  
+  ip_address            String?
+  user_agent            String?
+  
+  created_at            DateTime @default(now())
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user                  User? @relation(fields: [user_id], references: [id])
+  
+  @@index([organization_id])
+  @@index([event_type])
+  @@index([user_id])
+  @@index([created_at])
+}
+
+// ============================================================================
+// ANALYTICS & REPORTING
+// ============================================================================
+
+model AnalyticsEvent {
+  id                    String @id @default(cuid())
+  organization_id       String
+  
+  event_type            String
+  event_data            String // JSON
+  
+  created_at            DateTime @default(now())
+  
+  @@index([organization_id])
+  @@index([event_type])
+  @@index([created_at])
+}
+
+// ============================================================================
+// SYSTEM SETTINGS
+// ============================================================================
+
+model SystemSetting {
+  id                    String @id @default(cuid())
+  organization_id       String
+  
+  key                   String
+  value                 String // JSON-serialized value
+  
+  description           String?
+  is_encrypted          Boolean @default(false)
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  organization          Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  
+  @@unique([organization_id, key])
+  @@index([organization_id])
+}
+
+// Indexes for common queries
+// NOTE: Prisma doesn't support raw index definitions, but these should be created manually:
+// CREATE INDEX idx_lead_organization_status ON Lead(organization_id, status);
+// CREATE INDEX idx_invoice_organization_status ON Invoice(organization_id, status);
+// CREATE INDEX idx_proposal_organization_status ON Proposal(organization_id, status);
+// CREATE INDEX idx_meeting_organization_consultant ON Meeting(organization_id, consultant_id);
